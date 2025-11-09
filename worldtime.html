@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prayer Clock</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            background:#f4f4f4; 
+        }
+
+        .container {
+            max-width: 340px;
+            margin: 20px auto;
+            padding: 12px;
+            background:#fff;
+            border:1px solid #ddd;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 10px;
+        }
+
+        .dial {
+            position: relative;
+            width:270px;
+            height:270px;
+            margin: 12px auto;
+        }
+
+        .pie {
+            position:absolute;
+            inset:0;
+            width: 270px;
+            height: 270px;
+            border-radius: 50%;
+            margin: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1);
+        }
+
+        .inner {
+            position:absolute;
+            top:50%;
+            left:50%;
+            width:230px;
+            height:230px;
+            background:#fff;
+            border-radius:50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1);
+            transform: translate(-50%, -50%);
+            z-index:1;
+        }
+
+        .hand {
+            position:absolute;
+            left:50%;
+            bottom:50%;
+            width:3px;
+            background:#111;
+            border-radius:2px;
+            transform-origin: bottom center;
+            z-index:2;
+        }
+
+        .cap {
+            position:absolute;
+            width:5px;
+            height:5px;
+            background:#fff;
+            border:2px solid #000;
+            border-radius:50%;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            z-index:3;
+        }
+
+        .list {
+            position:absolute;
+            left:33%;
+            top:22%;
+            transform: translateX(-50%);
+            font-family: "Courier New", Courier, monospace;
+            font-size:12px;
+            font-weight:600;
+            z-index:1;
+        }
+        .l-fajr { color:rgb(69, 142, 232); }
+        .l-dhuhr { color:rgb(36, 182, 4); }
+        .l-asr { color:rgb(242, 171, 4); }
+        .l-maghrib { color: #F84E3D; }
+        .l-isha { color: #4E4242; }
+
+        .timewrap {
+            position:absolute;
+            left:50%;
+            top:50%;
+            transform: translateX(-50%);
+            z-index:1;
+            text-align:center;
+            line-height:1.15;
+        }
+
+        .now {
+            font-size: 24px;
+            font-weight: 300;
+        }
+
+        .rem {
+            margin-top: 3px;
+            font-size: 24px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    <div class="dial">
+        <div id="pie" class="pie"></div>
+        <div id="hand" class="hand"></div>
+        <div id="cap" class="cap"></div>
+        <div id="inner" class="inner"></div>
+        <div id="list" class="list">
+            <div><span class="l-fajr">F</span> <span id="l-fajr" class="l-fajr">0:00</span></div>
+            <div><span class="l-dhuhr">D</span> <span id="l-dhuhr" class="l-dhuhr">0:00</span></div>
+            <div><span class="l-asr">A</span> <span id="l-asr" class="l-asr">0:00</span></div>
+            <div><span class="l-maghrib">M</span> <span id="l-maghrib" class="l-maghrib">0:00</span></div>
+            <div><span class="l-isha">I</span> <span id="l-isha" class="l-isha">0:00</span></div>
+        </div>
+        <div id="timewrap" class="timewrap">
+            <div id="nowTime" class="now"></div>
+            <div id="remTime" class="rem"></div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        var DAY_SEC = 24 * 60 * 60;
+        var _TIMES = null;
+
+        // times in seconds since 00:00
+        function getPrayerTimes() {
+            const city = "Philadelphia";
+            const country = "US";
+            const method = 2;   // ISNA
+            const school = 0;   // Standard (Shafi/Maliki/Hanbali). Use 1 for Hanafi.
+            const url = `https://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(city)}&country=${country}&method=${method}&school=${school}`;
+
+            const toSec = (hhmm) => {
+                const [hh, mm] = hhmm.split(":").map(Number);
+                return (hh * 3600) + (mm * 60);
+            };
+
+            return fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error("Aladhan request failed");
+                return res.json();
+            })
+            .then(json => {
+                const t = json && json.data && json.data.timings ? json.data.timings : {};
+                _TIMES = {
+                    fajr:    toSec(t.Fajr),
+                    sunrise: toSec(t.Sunrise),
+                    dhuhr:   toSec(t.Dhuhr),
+                    asr:     toSec(t.Asr),
+                    maghrib: toSec(t.Maghrib),
+                    isha:    toSec(t.Isha)
+                };
+                return _TIMES;
+            });
+        }
+
+        // Convert seconds to degrees in 24h day
+        function secToDeg(s){ return (s / DAY_SEC) * 360; }
+
+        // 12-hour dial coloring: 0°=12 o’clock, 90°=3, 180°=6, 270°=9
+        function buildClockGradient(times){
+            var c1='#6FB1FF'; // Fajr→Sunrise
+            var c2='#E6E6E6'; // Sunrise→Dhuhr
+            var c3='#8bd17c'; // Dhuhr→Asr
+            var c4='#ffd166'; // Asr→Maghrib
+            var c5='#F84E3D'; // Maghrib→Isha
+            var c6='#4E4242'; // Isha→Fajr (next day)
+
+            var now = nowSecSinceMidnight();
+            var blockStart = Math.floor(now / 43200) * 43200; // 0..43199 → 0, 43200..86399 → 43200
+            var blockEnd   = blockStart + 43200;
+
+            function toDeg(secAbs){
+                return ((secAbs - blockStart) / 43200) * 360; // assumes secAbs clipped inside block
+            }
+            function addSlice(a, b, color, out){
+                var s = Math.max(a, blockStart);
+                var e = Math.min(b, blockEnd);
+                if (e <= s) return;
+                out.push(color + ' ' + toDeg(s) + 'deg ' + toDeg(e) + 'deg');
+            }
+
+            var stops = [];
+            addSlice(times.fajr,    times.sunrise,         c1, stops);
+            addSlice(times.sunrise, times.dhuhr,           c2, stops);
+            addSlice(times.dhuhr,   times.asr,             c3, stops);
+            addSlice(times.asr,     times.maghrib,         c4, stops);
+            addSlice(times.maghrib, times.isha,            c5, stops);
+            addSlice(times.isha,    times.fajr + DAY_SEC,  c6, stops);
+
+            return 'conic-gradient(' + stops.join(', ') + ')';
+        }
+
+
+        function relDegFromFajr(times, secNow){
+            return secToDeg((secNow - times.fajr + DAY_SEC) % DAY_SEC);
+        }
+
+        function nowSecSinceMidnight(){
+            var d=new Date();
+            return d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds();
+        }
+
+        // Hand shows current time within the current 12h block (0° at 12 o’clock)
+        function updateHand(times){
+            var inner = document.getElementById('inner');
+            var hand  = document.getElementById('hand');
+            var radius = Math.floor(Math.min(inner.offsetWidth, inner.offsetHeight)/2) + 7;
+            hand.style.height = radius + 'px';
+
+            var nowSec = nowSecSinceMidnight();
+            var blockStart = Math.floor(nowSec / 43200) * 43200; // 0..43199 → 0, 43200..86399 → 43200
+            var angle = ((nowSec - blockStart) / 43200) * 360;   // 0–360 within the 12h window
+
+            hand.dataset.angle = String(angle);
+            hand.style.transform = 'translateX(-50%) rotate(' + angle + 'deg)';
+        }
+
+
+        var handTimer = null;
+
+        function fmtHM(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            var hs = String(h);
+            var ms = String(m).padStart(2,'0');
+            return hs + ':' + ms;
+        }
+
+        function fmtNow24h(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        }
+
+        function nextPrayerRemaining(times, nowSec){
+            var seq = [times.fajr, times.sunrise, times.dhuhr, times.asr, times.maghrib, times.isha, times.fajr + DAY_SEC];
+            for (var i=0;i<seq.length;i++){
+                if (seq[i] > nowSec) {
+                    return seq[i] - nowSec;
+                }
+            }
+            return (times.fajr + DAY_SEC) - nowSec;
+        }
+
+        function updateTexts(times){
+            // list times
+            var timeList = document.getElementById('list');
+            document.getElementById('l-fajr').textContent = fmtNow24h(times.fajr);
+            document.getElementById('l-dhuhr').textContent = fmtNow24h(times.dhuhr);
+            document.getElementById('l-asr').textContent = fmtNow24h(times.asr);
+            document.getElementById('l-maghrib').textContent = fmtNow24h(times.maghrib);
+            document.getElementById('l-isha').textContent = fmtNow24h(times.isha);
+            
+            // now and remaining
+            var nowSec = nowSecSinceMidnight();
+            var angle = relDegFromFajr(times, nowSec);
+            var nowEl = document.getElementById('nowTime');
+            var remEl = document.getElementById('remTime');
+            var wrap = document.getElementById('timewrap');
+
+            nowEl.textContent = fmtNow24h(nowSec);
+            var rem = nextPrayerRemaining(times, nowSec);
+            remEl.textContent = fmtHM(rem);
+            // if less than 30 minutes remaining, highlight
+            if ((rem <= 30*60) && (nowSec >= times.dhuhr) && (nowSec <= times.isha)) {
+                remEl.style.color = '#FFFFFF';
+                remEl.style.backgroundColor = '#CD2929';
+                remEl.style.borderRadius = '5px';
+                remEl.style.padding = '2px 5px';
+            } else {
+                remEl.style.color = '#1B1B1B';
+                remEl.style.backgroundColor = '#F0F0F0';
+                remEl.style.borderRadius = '5px';
+                remEl.style.padding = '2px 5px';
+            }
+
+            // Position: if in upper half (angle < 90 || angle > 180), place texts in lower half
+            if (angle < 90 || angle > 270) {
+                wrap.style.top = '60%';
+                timeList.style.top = '22%';
+            } else {
+                wrap.style.top = '17%';
+                timeList.style.top = '52%';
+            }
+        }
+
+        async function render() {
+            const times = _TIMES || await getPrayerTimes();  // waits only if not cached
+            var pie = document.getElementById('pie');
+            pie.style.background = buildClockGradient(times);
+            updateHand(times);
+            updateTexts(times);
+            if (handTimer) { clearInterval(handTimer); }
+            handTimer = setInterval(function(){ updateHand(times); updateTexts(times); }, 60*1000);
+        }
+
+        render();
+    </script>
+</body>
+</html>
