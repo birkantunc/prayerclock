@@ -141,7 +141,7 @@
         var DAY_SEC = 24 * 60 * 60;
         var _TIMES = null;
 
-        // Placeholder: hardcoded to Philadelphia (times in seconds since 00:00)
+        // times in seconds since 00:00
         function getPrayerTimes() {
             const city = "Philadelphia";
             const country = "US";
@@ -155,22 +155,22 @@
             };
 
             return fetch(url)
-                .then(res => {
-                    if (!res.ok) throw new Error("Aladhan request failed");
-                    return res.json();
-                })
-                .then(json => {
-                    const t = json && json.data && json.data.timings ? json.data.timings : {};
-                    _TIMES = {
-                        fajr:    toSec(t.Fajr),
-                        sunrise: toSec(t.Sunrise),
-                        dhuhr:   toSec(t.Dhuhr),
-                        asr:     toSec(t.Asr),
-                        maghrib: toSec(t.Maghrib),
-                        isha:    toSec(t.Isha)
-                    };
-                    return _TIMES;
-                });
+            .then(res => {
+                if (!res.ok) throw new Error("Aladhan request failed");
+                return res.json();
+            })
+            .then(json => {
+                const t = json && json.data && json.data.timings ? json.data.timings : {};
+                _TIMES = {
+                    fajr:    toSec(t.Fajr),
+                    sunrise: toSec(t.Sunrise),
+                    dhuhr:   toSec(t.Dhuhr),
+                    asr:     toSec(t.Asr),
+                    maghrib: toSec(t.Maghrib),
+                    isha:    toSec(t.Isha)
+                };
+                return _TIMES;
+            });
         }
 
         // Convert seconds to degrees in 24h day
@@ -255,6 +255,7 @@
 
         function updateTexts(times){
             // list times
+            var timeList = document.getElementById('list');
             document.getElementById('l-fajr').textContent = fmtNow24h(times.fajr);
             document.getElementById('l-dhuhr').textContent = fmtNow24h(times.dhuhr);
             document.getElementById('l-asr').textContent = fmtNow24h(times.asr);
@@ -287,8 +288,10 @@
             // Position: if in upper half (angle < 90 || angle > 180), place texts in lower half
             if (angle < 90 || angle > 270) {
                 wrap.style.top = '60%';
+                timeList.style.top = '22%';
             } else {
                 wrap.style.top = '17%';
+                timeList.style.top = '52%';
             }
         }
 
