@@ -141,6 +141,42 @@
         var DAY_SEC = 24 * 60 * 60;
         var _TIMES = null;
 
+        // Convert seconds to degrees in 24h day
+        function secToDeg(s){ return (s / DAY_SEC) * 360; }
+
+        function relDegFromFajr(times, secNow){
+            return secToDeg((secNow - times.fajr + DAY_SEC) % DAY_SEC);
+        }
+
+        function nowSecSinceMidnight(){
+            var d=new Date();
+            return d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds();
+        }
+
+        function fmtHM(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            var hs = String(h);
+            var ms = String(m).padStart(2,'0');
+            return hs + ':' + ms;
+        }
+
+        function fmtNow24h(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        }
+
+        function nextPrayerRemaining(times, nowSec){
+            var seq = [times.fajr, times.sunrise, times.dhuhr, times.asr, times.maghrib, times.isha, times.fajr + DAY_SEC];
+            for (var i=0;i<seq.length;i++){
+                if (seq[i] > nowSec) {
+                    return seq[i] - nowSec;
+                }
+            }
+            return (times.fajr + DAY_SEC) - nowSec;
+        }
+
         // times in seconds since 00:00
         function getPrayerTimes() {
             const city = "Philadelphia";
@@ -172,9 +208,6 @@
                 return _TIMES;
             });
         }
-
-        // Convert seconds to degrees in 24h day
-        function secToDeg(s){ return (s / DAY_SEC) * 360; }
 
         // Build pie where 0° = Fajr and 360° = next Fajr
         function buildClockGradient(times){
@@ -208,15 +241,6 @@
             return 'conic-gradient(' + stops.join(', ') + ')';
         }
 
-        function relDegFromFajr(times, secNow){
-            return secToDeg((secNow - times.fajr + DAY_SEC) % DAY_SEC);
-        }
-
-        function nowSecSinceMidnight(){
-            var d=new Date();
-            return d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds();
-        }
-
         function updateHand(times){
             var inner = document.getElementById('inner');
             var hand = document.getElementById('hand');
@@ -225,32 +249,6 @@
             var angle = relDegFromFajr(times, nowSecSinceMidnight());
             hand.dataset.angle = String(angle);
             hand.style.transform = 'translateX(-50%) rotate(' + angle + 'deg)';
-        }
-
-        var handTimer = null;
-
-        function fmtHM(sec){
-            var h = Math.floor(sec/3600);
-            var m = Math.floor((sec%3600)/60);
-            var hs = String(h);
-            var ms = String(m).padStart(2,'0');
-            return hs + ':' + ms;
-        }
-
-        function fmtNow24h(sec){
-            var h = Math.floor(sec/3600);
-            var m = Math.floor((sec%3600)/60);
-            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-        }
-
-        function nextPrayerRemaining(times, nowSec){
-            var seq = [times.fajr, times.sunrise, times.dhuhr, times.asr, times.maghrib, times.isha, times.fajr + DAY_SEC];
-            for (var i=0;i<seq.length;i++){
-                if (seq[i] > nowSec) {
-                    return seq[i] - nowSec;
-                }
-            }
-            return (times.fajr + DAY_SEC) - nowSec;
         }
 
         function updateTexts(times){
@@ -295,6 +293,7 @@
             }
         }
 
+        var handTimer = null;
         async function render() {
             const times = _TIMES || await getPrayerTimes();  // waits only if not cached
             var pie = document.getElementById('pie');

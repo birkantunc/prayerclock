@@ -141,6 +141,41 @@
         var DAY_SEC = 24 * 60 * 60;
         var _TIMES = null;
 
+        // Convert absolute seconds to degrees in current 12h block
+        function relDeg12h(secAbs){
+            var blockStart = Math.floor(secAbs / 43200) * 43200; // 0..43199→0, 43200..86399→43200
+            return ((secAbs - blockStart) / 43200) * 360;        // 0–360 within current 12h window
+        }
+
+        function nowSecSinceMidnight(){
+            var d=new Date();
+            return d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds();
+        }
+
+        function fmtHM(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            var hs = String(h);
+            var ms = String(m).padStart(2,'0');
+            return hs + ':' + ms;
+        }
+
+        function fmtNow24h(sec){
+            var h = Math.floor(sec/3600);
+            var m = Math.floor((sec%3600)/60);
+            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        }
+
+        function nextPrayerRemaining(times, nowSec){
+            var seq = [times.fajr, times.sunrise, times.dhuhr, times.asr, times.maghrib, times.isha, times.fajr + DAY_SEC];
+            for (var i=0;i<seq.length;i++){
+                if (seq[i] > nowSec) {
+                    return seq[i] - nowSec;
+                }
+            }
+            return (times.fajr + DAY_SEC) - nowSec;
+        }
+
         // times in seconds since 00:00
         function getPrayerTimes() {
             const city = "Philadelphia";
@@ -173,17 +208,14 @@
             });
         }
 
-        // Convert seconds to degrees in 24h day
-        function secToDeg(s){ return (s / DAY_SEC) * 360; }
-
         // 12-hour dial coloring: 0°=12 o’clock, 90°=3, 180°=6, 270°=9
         function buildClockGradient(times){
-            var c1='#6FB1FF'; // Fajr→Sunrise
-            var c2='#E6E6E6'; // Sunrise→Dhuhr
-            var c3='#8bd17c'; // Dhuhr→Asr
-            var c4='#ffd166'; // Asr→Maghrib
-            var c5='#F84E3D'; // Maghrib→Isha
-            var c6='#4E4242'; // Isha→Fajr (next day)
+            var c1='#6FB1FF'; // Fajr
+            var c2='#E6E6E6'; // Sunrise
+            var c3='#8bd17c'; // Dhuhr
+            var c4='#ffd166'; // Asr
+            var c5='#F84E3D'; // Maghrib
+            var c6='#4E4242'; // Isha
 
             var now = nowSecSinceMidnight();
             var blockStart = Math.floor(now / 43200) * 43200; // 0..43199 → 0, 43200..86399 → 43200
@@ -200,6 +232,7 @@
             }
 
             var stops = [];
+            addSlice(0,             times.fajr,            c6, stops);
             addSlice(times.fajr,    times.sunrise,         c1, stops);
             addSlice(times.sunrise, times.dhuhr,           c2, stops);
             addSlice(times.dhuhr,   times.asr,             c3, stops);
@@ -210,56 +243,18 @@
             return 'conic-gradient(' + stops.join(', ') + ')';
         }
 
-
-        function relDegFromFajr(times, secNow){
-            return secToDeg((secNow - times.fajr + DAY_SEC) % DAY_SEC);
-        }
-
-        function nowSecSinceMidnight(){
-            var d=new Date();
-            return d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds();
-        }
-
         // Hand shows current time within the current 12h block (0° at 12 o’clock)
-        function updateHand(times){
+        function updateHand(){
             var inner = document.getElementById('inner');
             var hand  = document.getElementById('hand');
             var radius = Math.floor(Math.min(inner.offsetWidth, inner.offsetHeight)/2) + 7;
             hand.style.height = radius + 'px';
 
             var nowSec = nowSecSinceMidnight();
-            var blockStart = Math.floor(nowSec / 43200) * 43200; // 0..43199 → 0, 43200..86399 → 43200
-            var angle = ((nowSec - blockStart) / 43200) * 360;   // 0–360 within the 12h window
+            var angle  = relDeg12h(nowSec);
 
             hand.dataset.angle = String(angle);
             hand.style.transform = 'translateX(-50%) rotate(' + angle + 'deg)';
-        }
-
-
-        var handTimer = null;
-
-        function fmtHM(sec){
-            var h = Math.floor(sec/3600);
-            var m = Math.floor((sec%3600)/60);
-            var hs = String(h);
-            var ms = String(m).padStart(2,'0');
-            return hs + ':' + ms;
-        }
-
-        function fmtNow24h(sec){
-            var h = Math.floor(sec/3600);
-            var m = Math.floor((sec%3600)/60);
-            return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-        }
-
-        function nextPrayerRemaining(times, nowSec){
-            var seq = [times.fajr, times.sunrise, times.dhuhr, times.asr, times.maghrib, times.isha, times.fajr + DAY_SEC];
-            for (var i=0;i<seq.length;i++){
-                if (seq[i] > nowSec) {
-                    return seq[i] - nowSec;
-                }
-            }
-            return (times.fajr + DAY_SEC) - nowSec;
         }
 
         function updateTexts(times){
@@ -273,7 +268,7 @@
             
             // now and remaining
             var nowSec = nowSecSinceMidnight();
-            var angle = relDegFromFajr(times, nowSec);
+            var angle = relDeg12h(nowSec);
             var nowEl = document.getElementById('nowTime');
             var remEl = document.getElementById('remTime');
             var wrap = document.getElementById('timewrap');
@@ -304,14 +299,19 @@
             }
         }
 
+        var handTimer = null;
         async function render() {
             const times = _TIMES || await getPrayerTimes();  // waits only if not cached
             var pie = document.getElementById('pie');
             pie.style.background = buildClockGradient(times);
-            updateHand(times);
+            updateHand();
             updateTexts(times);
             if (handTimer) { clearInterval(handTimer); }
-            handTimer = setInterval(function(){ updateHand(times); updateTexts(times); }, 60*1000);
+            handTimer = setInterval(function(){
+                pie.style.background = buildClockGradient(times); // update the gradient too since it will change after 12pm
+                updateHand();
+                updateTexts(times);
+            }, 60*1000);
         }
 
         render();

@@ -101,11 +101,10 @@ export const className = `
 const DAY_SEC = 24 * 60 * 60;
 var _TIMES = null;
 
-// Convert seconds to degrees in 24h day
-function secToDeg(s){ return (s / DAY_SEC) * 360; }
-
-function relDegFromFajr(times, secNow){
-    return secToDeg((secNow - times.fajr + DAY_SEC) % DAY_SEC);
+// Convert absolute seconds to degrees in current 12h block
+function relDeg12h(secAbs){
+    var blockStart = Math.floor(secAbs / 43200) * 43200; // 0..43199→0, 43200..86399→43200
+    return ((secAbs - blockStart) / 43200) * 360;        // 0–360 within current 12h window
 }
 
 function nowSecSinceMidnight(){
@@ -169,7 +168,7 @@ function getPrayerTimes() {
     });
 }
 
-// Build pie where 0° = Fajr and 360° = next Fajr
+// 12-hour dial coloring: 0°=12 o’clock, 90°=3, 180°=6, 270°=9
 function buildClockGradient(times){
     var c1='#6FB1FF'; // Fajr
     var c2='#E6E6E6'; // Sunrise
@@ -178,35 +177,42 @@ function buildClockGradient(times){
     var c5='#F84E3D'; // Maghrib
     var c6='#4E4242'; // Isha
 
-    var base = times.fajr;
-    function relDeg(x){ return secToDeg((x - base + DAY_SEC) % DAY_SEC); }
+    var now = nowSecSinceMidnight();
+    var blockStart = Math.floor(now / 43200) * 43200; // 0..43199 → 0, 43200..86399 → 43200
+    var blockEnd   = blockStart + 43200;
 
-    var dFajr = 0;
-    var dSun  = relDeg(times.sunrise);
-    var dDhr  = relDeg(times.dhuhr);
-    var dAsr  = relDeg(times.asr);
-    var dMag  = relDeg(times.maghrib);
-    var dIsh  = relDeg(times.isha);
-    var d360  = 360;
+    function toDeg(secAbs){
+        return ((secAbs - blockStart) / 43200) * 360; // assumes secAbs clipped inside block
+    }
+    function addSlice(a, b, color, out){
+        var s = Math.max(a, blockStart);
+        var e = Math.min(b, blockEnd);
+        if (e <= s) return;
+        out.push(color + ' ' + toDeg(s) + 'deg ' + toDeg(e) + 'deg');
+    }
 
-    var stops = [
-    c1+' '+dFajr+'deg '+dSun+'deg',
-    c2+' '+dSun +'deg '+dDhr+'deg',
-    c3+' '+dDhr +'deg '+dAsr+'deg',
-    c4+' '+dAsr +'deg '+dMag+'deg',
-    c5+' '+dMag +'deg '+dIsh+'deg',
-    c6+' '+dIsh +'deg '+d360+'deg'
-    ];
+    var stops = [];
+    addSlice(0,             times.fajr,            c6, stops);
+    addSlice(times.fajr,    times.sunrise,         c1, stops);
+    addSlice(times.sunrise, times.dhuhr,           c2, stops);
+    addSlice(times.dhuhr,   times.asr,             c3, stops);
+    addSlice(times.asr,     times.maghrib,         c4, stops);
+    addSlice(times.maghrib, times.isha,            c5, stops);
+    addSlice(times.isha,    times.fajr + DAY_SEC,  c6, stops);
 
     return 'conic-gradient(' + stops.join(', ') + ')';
 }
 
-function updateHand(times){
+// Hand shows current time within the current 12h block (0° at 12 o’clock)
+function updateHand(){
     var inner = document.getElementById('inner');
-    var hand = document.getElementById('hand');
+    var hand  = document.getElementById('hand');
     var radius = Math.floor(Math.min(inner.offsetWidth, inner.offsetHeight)/2) + 7;
     hand.style.height = radius + 'px';
-    var angle = relDegFromFajr(times, nowSecSinceMidnight());
+
+    var nowSec = nowSecSinceMidnight();
+    var angle  = relDeg12h(nowSec);
+
     hand.dataset.angle = String(angle);
     hand.style.transform = 'translateX(-50%) rotate(' + angle + 'deg)';
 }
@@ -219,10 +225,10 @@ function updateTexts(times){
     document.getElementById('l-asr').textContent = fmtNow24h(times.asr);
     document.getElementById('l-maghrib').textContent = fmtNow24h(times.maghrib);
     document.getElementById('l-isha').textContent = fmtNow24h(times.isha);
-
+    
     // now and remaining
     var nowSec = nowSecSinceMidnight();
-    var angle = relDegFromFajr(times, nowSec);
+    var angle = relDeg12h(nowSec);
     var nowEl = document.getElementById('nowTime');
     var remEl = document.getElementById('remTime');
     var wrap = document.getElementById('timewrap');
@@ -245,10 +251,10 @@ function updateTexts(times){
 
     // Position: if in upper half (angle < 90 || angle > 180), place texts in lower half
     if (angle < 90 || angle > 270) {
-        wrap.style.top = '55%';
+        wrap.style.top = '60%';
         timeList.style.top = '22%';
     } else {
-        wrap.style.top = '18%';
+        wrap.style.top = '17%';
         timeList.style.top = '52%';
     }
 }
@@ -258,7 +264,7 @@ async function display() {
     const times = _TIMES || await getPrayerTimes();  // waits only if not cached
     var pie = document.getElementById('pie');
     pie.style.background = buildClockGradient(times);
-    updateHand(times);
+    updateHand();
     updateTexts(times);
     //if (handTimer) { clearInterval(handTimer); }
     //handTimer = setInterval(function(){ updateHand(times); updateTexts(times); }, 60*1000);
