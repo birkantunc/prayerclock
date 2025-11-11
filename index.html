@@ -268,8 +268,11 @@
 
             // current time
             nowEl.textContent = fmtNow24h(nowSec);
-            if ((nowSec >= times.fajr) && (nowSec <= times.dhuhr)) {
+            if ((nowSec >= times.fajr) && (nowSec <= times.sunrise)) {
                 nowEl.style.color = '#457EE8';  // Fajr
+            }
+            if ((nowSec >= times.sunrise) && (nowSec <= times.dhuhr)) {
+                nowEl.style.color = '#111';  // None
             }
             else if ((nowSec > times.dhuhr) && (nowSec <= times.asr)) {
                 nowEl.style.color = '#24B604';  // Dhuhr
